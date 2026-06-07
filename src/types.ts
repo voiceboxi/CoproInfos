@@ -10,6 +10,7 @@ export interface Member {
   id: string; // The userId
   role: 'owner' | 'tenant' | 'board' | 'syndic';
   lot?: string;
+  floor?: string;
   joinedAt: number;
   user?: User; // joined locally
 }

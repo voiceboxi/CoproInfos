@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { auth, db } from '../firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc } from 'firebase/firestore';
 import { useAuth } from './AuthProvider';
-import { Building2, Key, Mail, User as UserIcon, AlertCircle, Loader2 } from 'lucide-react';
+import { Building2, Key, Mail, User as UserIcon, AlertCircle, Loader2, Info, ShieldCheck } from 'lucide-react';
 import { handleFirestoreError, OperationType } from '../lib/utils';
 
 export function AuthView() {
-  const [view, setView] = useState<'login' | 'signup_code' | 'signup_info' | 'forgot'>('login');
+  const [view, setView] = useState<'login' | 'signup_code' | 'signup_info' | 'forgot' | 'signup_admin'>('login');
   
   // State
   const [email, setEmail] = useState('');
@@ -85,6 +85,53 @@ export function AuthView() {
       // Optionally send email verification
       await sendEmailVerification(userCred.user);
       
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignupAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      if (!residenceName.trim()) throw new Error("Le nom de la résidence est requis.");
+      
+      const userCred = await createUserWithEmailAndPassword(auth, email, password);
+      const uid = userCred.user.uid;
+      
+      // 1. Create Residence
+      const residenceRef = await addDoc(collection(db, 'residences'), {
+        name: residenceName,
+        createdAt: Date.now()
+      });
+      const newResId = residenceRef.id;
+
+      // 2. Create invite code automatically (optional, but good idea)
+      const code = "RES-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+      await setDoc(doc(db, 'invites', code), {
+        residenceId: newResId,
+        residenceName: residenceName,
+        createdAt: Date.now()
+      });
+      
+      // 3. Create User Profile
+      await setDoc(doc(db, 'users', uid), {
+        email,
+        name,
+        residenceId: newResId,
+        createdAt: Date.now()
+      });
+      
+      // 4. Create Member
+      await setDoc(doc(db, `residences/${newResId}/members`, uid), {
+        role: 'syndic', // Administrative role
+        joinedAt: Date.now()
+      });
+
+      await refreshAuthData();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -173,6 +220,13 @@ export function AuthView() {
                 <button type="button" onClick={() => setView('forgot')} className="text-xs font-semibold text-[#1E3A5F] hover:underline">Mot de passe oublié ?</button>
                 <button type="button" onClick={() => setView('signup_code')} className="text-xs font-bold text-[#1E3A5F] hover:underline">Créer un compte</button>
               </div>
+              
+              <div className="pt-2 border-t border-gray-100 mt-4">
+                <button type="button" onClick={() => setView('signup_admin')} className="w-full flex items-center justify-center space-x-2 text-xs font-bold text-gray-500 hover:text-[#1E3A5F] transition-colors py-2">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Espace Syndic / Administrateur</span>
+                </button>
+              </div>
             </form>
           )}
 
@@ -181,6 +235,10 @@ export function AuthView() {
               <div className="text-center mb-6">
                 <h3 className="text-xl font-bold text-[#1E3A5F]">Rejoindre votre résidence</h3>
                 <p className="text-xs text-[#6B7280] mt-1">Saisissez le code fourni par votre syndic ou conseil syndical.</p>
+                <div className="mt-4 p-3 bg-blue-50/80 rounded-xl text-left border border-blue-100 flex items-start">
+                  <Info className="w-5 h-5 text-blue-500 shrink-0 mr-2 mt-0.5" />
+                  <p className="text-xs text-blue-800 leading-relaxed font-medium">Pour obtenir ce code, veuillez consulter les communications de votre syndic de copropriété (courrier d'AG, email d'invitation) ou contacter votre gardien.</p>
+                </div>
               </div>
               <div>
                 <label className="block text-[10px] uppercase font-bold text-[#6B7280] ml-1 mb-1">Code d'invitation</label>
@@ -284,6 +342,72 @@ export function AuthView() {
                 </button>
               </div>
               <div className="text-center pt-2">
+                <button type="button" onClick={() => setView('login')} className="text-xs font-semibold text-[#6B7280] hover:text-[#1E3A5F] transition-colors">Retour à la connexion</button>
+              </div>
+            </form>
+          )}
+
+          {view === 'signup_admin' && (
+            <form onSubmit={handleSignupAdmin} className="space-y-4">
+              <div className="text-center mb-6">
+                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-bold text-[#1E3A5F]">Créer une résidence</h3>
+                <p className="text-xs text-[#6B7280] mt-1">Espace réservé aux syndics et administrateurs.</p>
+              </div>
+              
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-[#6B7280] ml-1 mb-1">Nom de la copropriété *</label>
+                <div className="relative rounded-xl shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Building2 className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input type="text" required value={residenceName} onChange={(e) => setResidenceName(e.target.value)}
+                    className="focus:ring-2 focus:ring-[#1E3A5F]/50 focus:border-[#1E3A5F] block w-full pl-10 sm:text-sm border-gray-200 rounded-xl py-2.5 border bg-white/80 backdrop-blur-sm shadow-sm transition-all text-gray-800" placeholder="Ex: Résidence Les Mimosas" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-[#6B7280] ml-1 mb-1">Votre nom et prénom *</label>
+                <div className="relative rounded-xl shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <UserIcon className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input type="text" required value={name} onChange={(e) => setName(e.target.value)}
+                    className="focus:ring-2 focus:ring-[#1E3A5F]/50 focus:border-[#1E3A5F] block w-full pl-10 sm:text-sm border-gray-200 rounded-xl py-2.5 border bg-white/80 backdrop-blur-sm shadow-sm transition-all text-gray-800" placeholder="Jean Dupont (Syndic)" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-[#6B7280] ml-1 mb-1">Email professionnel *</label>
+                <div className="relative rounded-xl shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Mail className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+                    className="focus:ring-2 focus:ring-[#1E3A5F]/50 focus:border-[#1E3A5F] block w-full pl-10 sm:text-sm border-gray-200 rounded-xl py-2.5 border bg-white/80 backdrop-blur-sm shadow-sm transition-all text-gray-800" placeholder="contact@syndic.com" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-[#6B7280] ml-1 mb-1">Mot de passe *</label>
+                <div className="relative rounded-xl shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Key className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} minLength={8}
+                    className="focus:ring-2 focus:ring-[#1E3A5F]/50 focus:border-[#1E3A5F] block w-full pl-10 sm:text-sm border-gray-200 rounded-xl py-2.5 border bg-white/80 backdrop-blur-sm shadow-sm transition-all text-gray-800" />
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button type="submit" disabled={loading} className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-lg shadow-[#1E3A5F]/20 text-sm font-bold text-white bg-[#1E3A5F] hover:bg-[#152a46] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1E3A5F] disabled:opacity-50 transition-all active:scale-[0.98]">
+                  {loading ? <Loader2 className="animate-spin h-5 w-5" /> : 'Créer l\'espace résidence'}
+                </button>
+              </div>
+              
+              <div className="text-center mt-4">
                 <button type="button" onClick={() => setView('login')} className="text-xs font-semibold text-[#6B7280] hover:text-[#1E3A5F] transition-colors">Retour à la connexion</button>
               </div>
             </form>

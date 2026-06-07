@@ -4,7 +4,7 @@ import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import { useAuth } from './AuthProvider';
 import { DocumentInfo } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/utils';
-import { FileText, Download, Phone, Shield, Wrench, Zap, Building2 } from 'lucide-react';
+import { FileText, Download, Phone, Shield, Wrench, Zap, Building2, Star } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -37,6 +37,26 @@ export function InfosView() {
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
   const [filter, setFilter] = useState<string>('Tous');
   const [activeTab, setActiveTab] = useState<'documents' | 'urgences'>('documents');
+  const [favorites, setFavorites] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem('doc_favorites');
+    if (saved) {
+      try { return new Set(JSON.parse(saved)) as Set<string>; } catch (e) {}
+    }
+    return new Set<string>();
+  });
+
+  const toggleFavorite = (docId: string) => {
+    setFavorites(prev => {
+      const newFavs = new Set(prev);
+      if (newFavs.has(docId)) {
+        newFavs.delete(docId);
+      } else {
+        newFavs.add(docId);
+      }
+      localStorage.setItem('doc_favorites', JSON.stringify(Array.from(newFavs)));
+      return newFavs;
+    });
+  };
 
   useEffect(() => {
     if (!currentResidence) return;
@@ -51,8 +71,13 @@ export function InfosView() {
   }, [currentResidence]);
 
   const allDocs = [...documents, ...MOCK_DOCS].sort((a, b) => b.createdAt - a.createdAt);
-  const categories = ['Tous', ...Array.from(new Set(allDocs.map(d => d.category)))];
-  const filteredDocs = filter === 'Tous' ? allDocs : allDocs.filter(d => d.category === filter);
+  const categories = ['Tous', 'Favoris', ...Array.from(new Set(allDocs.map(d => d.category)))];
+  
+  const filteredDocs = allDocs.filter(d => {
+    if (filter === 'Tous') return true;
+    if (filter === 'Favoris') return favorites.has(d.id);
+    return d.category === filter;
+  });
 
   return (
     <div className="h-full flex flex-col bg-[#F9F9FB]">
@@ -109,12 +134,20 @@ export function InfosView() {
                     <h3 className="text-sm font-semibold text-gray-900 leading-tight mb-1 truncate">{doc.title}</h3>
                     <p className="text-xs text-gray-500">{format(doc.createdAt, 'dd MMMM yyyy', { locale: fr })}</p>
                   </div>
-                  <button 
-                    onClick={() => window.open(doc.fileUrl, '_blank')}
-                    className="p-2 ml-2 text-gray-400 hover:text-[#1E3A5F] transition-colors rounded-full hover:bg-gray-50"
-                  >
-                    <Download className="w-5 h-5" />
-                  </button>
+                  <div className="flex items-center gap-1 ml-2">
+                    <button 
+                      onClick={() => toggleFavorite(doc.id)}
+                      className={`p-2 transition-colors rounded-full hover:bg-gray-50 ${favorites.has(doc.id) ? 'text-yellow-500' : 'text-gray-300 hover:text-yellow-500'}`}
+                    >
+                      <Star className={`w-5 h-5 ${favorites.has(doc.id) ? 'fill-current' : ''}`} />
+                    </button>
+                    <button 
+                      onClick={() => window.open(doc.fileUrl, '_blank')}
+                      className="p-2 text-gray-400 hover:text-[#1E3A5F] transition-colors rounded-full hover:bg-gray-50"
+                    >
+                      <Download className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
               ))
             )}

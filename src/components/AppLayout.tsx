@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthProvider';
 import { auth } from '../firebase';
-import { MessageSquare, Info, Users, LogOut, Building2, Bell, AlertTriangle, Calendar, X } from 'lucide-react';
+import { MessageSquare, Info, Users, LogOut, Building2, Bell, AlertTriangle, Calendar, X, UserCircle } from 'lucide-react';
 import { DiscussionsView } from './DiscussionsView';
 import { InfosView } from './InfosView';
 import { ContactsView } from './ContactsView';
+import { ProfileView } from './ProfileView';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -25,7 +26,7 @@ const MOCK_NOTIFICATIONS: AppNotification[] = [
 
 export function AppLayout() {
   const { userProfile, currentResidence } = useAuth();
-  const [activeTab, setActiveTab] = useState<'accueil' | 'infos' | 'contact'>('accueil');
+  const [activeTab, setActiveTab] = useState<'accueil' | 'infos' | 'contact' | 'profil'>('accueil');
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>(MOCK_NOTIFICATIONS);
 
@@ -87,6 +88,7 @@ export function AppLayout() {
         {activeTab === 'accueil' && <DiscussionsView />}
         {activeTab === 'infos' && <InfosView />}
         {activeTab === 'contact' && <ContactsView />}
+        {activeTab === 'profil' && <ProfileView />}
       </main>
 
       {/* Bottom Navigation */}
@@ -122,6 +124,17 @@ export function AppLayout() {
         >
           <Users className={cn("w-6 h-6 mb-1", activeTab === 'contact' && "fill-current opacity-20")} />
           <span className="text-[10px] font-medium tracking-wide">Contact</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('profil')}
+          className={cn(
+            "flex flex-col items-center justify-center flex-1 py-3 transition-colors",
+            activeTab === 'profil' ? "text-[#1E3A5F]" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <UserCircle className={cn("w-6 h-6 mb-1", activeTab === 'profil' && "fill-current opacity-20")} />
+          <span className="text-[10px] font-medium tracking-wide">Profil</span>
         </button>
       </nav>
 

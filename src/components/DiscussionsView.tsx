@@ -4,7 +4,7 @@ import { collection, query, onSnapshot, orderBy, addDoc, serverTimestamp, getDoc
 import { useAuth } from './AuthProvider';
 import { Thread, User, Member } from '../types';
 import { handleFirestoreError, OperationType, cn } from '../lib/utils';
-import { Search, Plus, User as UserIcon, LogOut, Send, Paperclip, MessageSquare, Calendar, Bell } from 'lucide-react';
+import { Search, Plus, User as UserIcon, LogOut, Send, Paperclip, MessageSquare, Calendar, Bell, X, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
@@ -107,6 +107,11 @@ export function DiscussionsView() {
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [users, setUsers] = useState<Record<string, User>>({});
 
+  const [isCreatingThread, setIsCreatingThread] = useState(false);
+  const [newThreadName, setNewThreadName] = useState('');
+  const [newThreadType, setNewThreadType] = useState<'group' | 'private'>('group');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   useEffect(() => {
     if (!currentResidence || !userProfile) return;
     
@@ -133,6 +138,36 @@ export function DiscussionsView() {
     
     return snap;
   }, [currentResidence, userProfile]);
+
+  const handleCreateThread = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newThreadName.trim() || !userProfile || !currentResidence) return;
+    setIsSubmitting(true);
+    try {
+      const threadRef = await addDoc(collection(db, `residences/${currentResidence.id}/threads`), {
+        name: newThreadName.trim(),
+        type: newThreadType,
+        memberIds: [userProfile.id],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      setIsCreatingThread(false);
+      setNewThreadName('');
+      
+      const newThread = {
+        id: threadRef.id,
+        name: newThreadName.trim(),
+        type: newThreadType,
+        memberIds: [userProfile.id],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      } as Thread;
+      setActiveThread(newThread);
+    } catch(err) {
+      console.error(err);
+    }
+    setIsSubmitting(false);
+  };
 
   if (activeThread) {
     return <ActiveChat thread={activeThread} onClose={() => setActiveThread(null)} members={[]} users={users} />;
@@ -179,7 +214,10 @@ export function DiscussionsView() {
           <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input type="text" placeholder="Rechercher une discussion..." className="w-full bg-white/60 backdrop-blur-md border border-white/40 shadow-sm rounded-xl pl-10 pr-4 py-2.5 text-sm focus:ring-[#1E3A5F] focus:bg-white transition-all font-medium text-gray-800" />
         </div>
-        <button className="ml-3 p-2.5 bg-[#1E3A5F] text-white rounded-xl shadow-md shadow-[#1E3A5F]/20 hover:scale-105 active:scale-95 transition-all">
+        <button 
+          onClick={() => setIsCreatingThread(true)}
+          className="ml-3 p-2.5 bg-[#1E3A5F] text-white rounded-xl shadow-md shadow-[#1E3A5F]/20 hover:scale-105 active:scale-95 transition-all"
+        >
           <Plus className="w-5 h-5" />
         </button>
       </div>
@@ -214,6 +252,86 @@ export function DiscussionsView() {
           </div>
         )}
       </div>
+
+      {/* Create Thread Modal */}
+      <AnimatePresence>
+        {isCreatingThread && (
+          <motion.div
+            initial={{ opacity: 0, y: '100%' }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="absolute inset-0 z-50 bg-[#F0F2F5]/95 backdrop-blur-2xl flex flex-col pt-[env(safe-area-inset-top)]"
+          >
+            <div className="px-4 py-4 flex items-center justify-between border-b border-white/40 bg-white/30 shrink-0 shadow-sm z-10">
+              <h3 className="text-lg font-bold text-[#1E3A5F]">Nouvelle discussion</h3>
+              <button 
+                onClick={() => !isSubmitting && setIsCreatingThread(false)} 
+                className="p-2 bg-white/50 rounded-full text-gray-500 hover:text-gray-900 shadow-sm border border-white/50 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="flex-1 p-6 flex flex-col justify-center overflow-y-auto">
+              <form onSubmit={handleCreateThread} className="space-y-4 bg-white/60 backdrop-blur-xl border border-white/60 p-6 rounded-3xl shadow-xl">
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-[#6B7280] ml-1 mb-1">Nom du groupe ou du contact</label>
+                  <input 
+                    required 
+                    type="text" 
+                    value={newThreadName} 
+                    onChange={e => setNewThreadName(e.target.value)} 
+                    disabled={isSubmitting} 
+                    className="focus:ring-2 focus:ring-[#1E3A5F]/50 focus:border-[#1E3A5F] block w-full border-gray-200 rounded-xl py-2.5 px-3 border bg-white/80 backdrop-blur-sm shadow-sm transition-all text-gray-800 text-sm font-medium disabled:opacity-60" 
+                    placeholder="Ex: Conseil Syndical, ou M. Dupont" 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-[#6B7280] ml-1 mb-1">Type de discussion</label>
+                  <div className="grid grid-cols-2 gap-3 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => setNewThreadType('group')}
+                      className={cn(
+                        "py-2.5 rounded-xl text-sm font-semibold border transition-all",
+                        newThreadType === 'group' 
+                          ? "bg-[#1E3A5F] border-[#1E3A5F] text-white shadow-md shadow-[#1E3A5F]/20" 
+                          : "bg-white/80 border-gray-200 text-gray-600 hover:bg-white"
+                      )}
+                    >
+                      Groupe
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewThreadType('private')}
+                      className={cn(
+                        "py-2.5 rounded-xl text-sm font-semibold border transition-all",
+                        newThreadType === 'private' 
+                          ? "bg-[#1E3A5F] border-[#1E3A5F] text-white shadow-md shadow-[#1E3A5F]/20" 
+                          : "bg-white/80 border-gray-200 text-gray-600 hover:bg-white"
+                      )}
+                    >
+                      Privé
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <button 
+                    type="submit" 
+                    disabled={isSubmitting || !newThreadName.trim()} 
+                    className="w-full flex justify-center items-center py-3 px-4 rounded-xl shadow-lg shadow-[#1E3A5F]/20 text-sm font-bold text-white bg-[#1E3A5F] hover:bg-[#152a46] transition-all active:scale-[0.98] disabled:opacity-50"
+                  >
+                    {isSubmitting ? <Loader2 className="animate-spin w-5 h-5" /> : 'Créer la discussion'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { collection, query, onSnapshot, orderBy, addDoc, serverTimestamp, getDoc
 import { useAuth } from './AuthProvider';
 import { Thread, User, Member } from '../types';
 import { handleFirestoreError, OperationType, cn } from '../lib/utils';
-import { Search, Plus, User as UserIcon, LogOut, Send, Paperclip, MessageSquare } from 'lucide-react';
+import { Search, Plus, User as UserIcon, LogOut, Send, Paperclip, MessageSquare, Calendar, Bell } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
@@ -140,7 +140,41 @@ export function DiscussionsView() {
 
   return (
     <div className="h-full flex flex-col bg-transparent">
-      <div className="px-4 py-3 border-b border-white/40 flex items-center justify-between bg-white/20 backdrop-blur-sm shadow-sm z-10 shrink-0">
+      <div className="px-4 pt-4 pb-2 shrink-0">
+        <h2 className="text-xl font-bold text-[#1E3A5F]">Tableau de bord</h2>
+      </div>
+
+      <div className="px-4 pb-4 space-y-3 shrink-0">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white/60 backdrop-blur-md border border-white/60 p-4 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-2">
+              <h4 className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">Messages Syndic</h4>
+              <div className="bg-blue-50/80 text-blue-600 p-1.5 rounded-lg shadow-inner"><Send className="w-4 h-4" /></div>
+            </div>
+            <p className="text-xl font-bold text-[#1E3A5F]">2 <span className="text-[10px] font-medium text-gray-500 lowercase">en cours</span></p>
+          </div>
+          
+          <div className="bg-white/60 backdrop-blur-md border border-white/60 p-4 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-2">
+              <h4 className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider">Prochaine AG</h4>
+              <div className="bg-emerald-50/80 text-emerald-600 p-1.5 rounded-lg shadow-inner"><Calendar className="w-4 h-4" /></div>
+            </div>
+            <p className="text-sm font-bold text-[#1E3A5F] leading-tight">15 Juin 2026</p>
+          </div>
+        </div>
+        
+        <div className="bg-white/60 backdrop-blur-md border border-white/60 p-4 rounded-2xl shadow-sm flex items-center hover:shadow-md transition-shadow">
+          <div className="bg-orange-50/80 text-orange-600 p-2.5 rounded-xl mr-3 shadow-inner">
+            <Bell className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-bold text-[#1E3A5F] truncate">Coupure d'eau prévue</h4>
+            <p className="text-[10px] text-gray-500 font-medium mt-0.5 truncate">Bâtiment A • Demain, 09h00 - 12h00</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-4 py-3 border-y border-white/40 flex items-center justify-between bg-white/20 backdrop-blur-sm shadow-sm z-10 shrink-0">
         <div className="relative flex-1">
           <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input type="text" placeholder="Rechercher une discussion..." className="w-full bg-white/60 backdrop-blur-md border border-white/40 shadow-sm rounded-xl pl-10 pr-4 py-2.5 text-sm focus:ring-[#1E3A5F] focus:bg-white transition-all font-medium text-gray-800" />

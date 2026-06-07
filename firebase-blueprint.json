@@ -1,0 +1,109 @@
+{
+  "entities": {
+    "user": {
+      "title": "User",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "residenceId": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["email", "name", "residenceId"]
+    },
+    "member": {
+      "title": "Member",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string" },
+        "lot": { "type": "string" },
+        "joinedAt": { "type": "number" }
+      },
+      "required": ["role"]
+    },
+    "residence": {
+      "title": "Residence",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name"]
+    },
+    "invite": {
+      "title": "Invite",
+      "type": "object",
+      "properties": {
+        "residenceId": { "type": "string" },
+        "residenceName": { "type": "string" }
+      },
+      "required": ["residenceId", "residenceName"]
+    },
+    "thread": {
+      "title": "Thread",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "memberIds": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "lastMessageTime": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["type", "memberIds"]
+    },
+    "message": {
+      "title": "Message",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["senderId", "text"]
+    },
+    "document": {
+      "title": "Document",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["title", "fileUrl"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/user" },
+      "description": "Global user profiles"
+    },
+    "/invites/{inviteId}": {
+      "schema": { "$ref": "#/entities/invite" },
+      "description": "Invitation codes mapping to residences"
+    },
+    "/residences/{residenceId}": {
+      "schema": { "$ref": "#/entities/residence" },
+      "description": "Residences"
+    },
+    "/residences/{residenceId}/members/{userId}": {
+      "schema": { "$ref": "#/entities/member" },
+      "description": "Members of a residence"
+    },
+    "/residences/{residenceId}/threads/{threadId}": {
+      "schema": { "$ref": "#/entities/thread" },
+      "description": "Threads in a residence"
+    },
+    "/residences/{residenceId}/threads/{threadId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/message" },
+      "description": "Messages"
+    },
+    "/residences/{residenceId}/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/document" },
+      "description": "Documents"
+    }
+  }
+}

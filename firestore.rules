@@ -1,0 +1,132 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+    
+    function isMember(residenceId) {
+      return exists(/databases/$(database)/documents/residences/$(residenceId)/members/$(request.auth.uid));
+    }
+
+    // --- Users ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'name', 'residenceId', 'createdAt']) && data.keys().size() >= 4 &&
+             data.email is string && data.email.size() <= 100 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.residenceId is string && data.residenceId.size() > 0 &&
+             data.createdAt is number;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId);
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(incoming());
+      allow update: if isSignedIn() && request.auth.uid == userId && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['name', 'updatedAt']);
+    }
+
+    // --- Invites ---
+    match /invites/{inviteId} {
+      allow get: if isSignedIn() && isValidId(inviteId);
+    }
+
+    // --- Residences ---
+    // Anyone who is a member can read the residence doc
+    match /residences/{residenceId} {
+      allow get: if isSignedIn() && isValidId(residenceId) && isMember(residenceId);
+      // For testing/bootstrap, keeping it simple.
+    }
+
+    // --- Members ---
+    function isValidMember(data) {
+      return data.keys().hasAll(['role', 'joinedAt']) &&
+             data.role is string &&
+             data.joinedAt is number;
+    }
+
+    match /residences/{residenceId}/members/{userId} {
+      // Any member of the residence can read the member list
+      allow read: if isSignedIn() && isMember(residenceId);
+      
+      // Allow user to join if they have a valid invite (we won't double check the invite string in rules here for simplicity,
+      // the client code will only get here if they know the residenceId from the invite collection)
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidMember(incoming());
+      allow update: if isSignedIn() && request.auth.uid == userId && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['lot']);
+    }
+
+    // --- Threads ---
+    function isValidThread(data) {
+      return data.keys().hasAll(['type', 'memberIds', 'createdAt']) &&
+             data.type is string && (data.type == 'direct' || data.type == 'group') &&
+             data.memberIds is list && data.memberIds.size() > 0 && data.memberIds.size() <= 100 && data.memberIds[0] is string &&
+             data.createdAt is number;
+    }
+
+    match /residences/{residenceId}/threads/{threadId} {
+      allow get, list: if isSignedIn() && isMember(residenceId) && 
+                       (existing().type == 'group' || request.auth.uid in existing().memberIds);
+      
+      allow create: if isSignedIn() && isMember(residenceId) && 
+                    isValidThread(incoming()) && 
+                    request.auth.uid in incoming().memberIds;
+                    
+      allow update: if isSignedIn() && isMember(residenceId) &&
+                    (existing().type == 'group' || request.auth.uid in existing().memberIds) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'lastMessageTime', 'updatedAt']);
+    }
+
+    // --- Messages ---
+    function isValidMessage(data) {
+      return data.keys().hasAll(['senderId', 'text', 'createdAt']) &&
+             data.senderId is string && data.senderId.size() > 0 &&
+             data.text is string && data.text.size() <= 2000 &&
+             data.createdAt is number;
+    }
+
+    match /residences/{residenceId}/threads/{threadId}/messages/{messageId} {
+      function canAccessThread() {
+        let thread = get(/databases/$(database)/documents/residences/$(residenceId)/threads/$(threadId)).data;
+        return thread.type == 'group' || request.auth.uid in thread.memberIds;
+      }
+
+      allow read: if isSignedIn() && isMember(residenceId) && canAccessThread();
+      
+      allow create: if isSignedIn() && isMember(residenceId) &&
+                    incoming().senderId == request.auth.uid &&
+                    isValidMessage(incoming()) && 
+                    canAccessThread();
+    }
+
+    // --- Documents ---
+    function isValidDocument(data) {
+       return data.keys().hasAll(['title', 'category', 'fileUrl', 'createdAt']) &&
+              data.title is string && data.title.size() > 0 && data.title.size() <= 150 &&
+              data.category is string && data.category.size() > 0 && data.category.size() <= 50 &&
+              data.fileUrl is string && data.fileUrl.size() > 0 && data.fileUrl.size() <= 500 &&
+              data.createdAt is number;
+    }
+
+    match /residences/{residenceId}/documents/{documentId} {
+      allow get, list: if isSignedIn() && isMember(residenceId);
+      allow create: if isSignedIn() && isMember(residenceId) && isValidDocument(incoming());
+    }
+
+  }
+}

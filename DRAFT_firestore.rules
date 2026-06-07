@@ -1,0 +1,136 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+    
+    function getUser(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    // --- Users ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'name', 'residenceId', 'createdAt']) && 
+             data.email is string && data.email.size() <= 100 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.residenceId is string && data.residenceId.size() > 0 && data.residenceId.size() <= 128 &&
+             data.createdAt is number;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId);
+      allow list: if isSignedIn() && existing().residenceId == getUser(request.auth.uid).residenceId;
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(incoming()) && incoming().createdAt == request.time.toMillis();
+      allow update: if isSignedIn() && request.auth.uid == userId && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'lot', 'updatedAt']) &&
+                    incoming().updatedAt == request.time.toMillis();
+    }
+
+    // --- Invites ---
+    match /invites/{inviteId} {
+      // Anyone signed in can read an invite if they have the ID (the ID is the code)
+      allow get: if isSignedIn() && isValidId(inviteId);
+    }
+
+    // --- Residences ---
+    function isValidResidence(data) {
+      return data.keys().hasAll(['name', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.createdAt is number;
+    }
+
+    match /residences/{residenceId} {
+      allow get: if isSignedIn() && isValidId(residenceId); // Allow anyone to get if they know the ID (after checking invite)
+      allow create: if isSignedIn() && isValidResidence(incoming()) && incoming().createdAt == request.time.toMillis();
+    }
+
+    // --- Threads ---
+    function isValidThread(data) {
+      return data.keys().hasAll(['residenceId', 'name', 'type', 'memberIds', 'createdAt']) &&
+             data.residenceId is string && data.residenceId.size() > 0 &&
+             data.name is string && data.name.size() <= 100 &&
+             data.type is string && (data.type == 'direct' || data.type == 'group') &&
+             data.memberIds is list && data.memberIds.size() > 0 && data.memberIds.size() <= 100 && data.memberIds[0] is string &&
+             data.createdAt is number;
+    }
+
+    match /threads/{threadId} {
+      // Users can get/list threads in their residence where they are a member (or it's a group)
+      allow get, list: if isSignedIn() && 
+                       existing().residenceId == getUser(request.auth.uid).residenceId &&
+                       (existing().type == 'group' || request.auth.uid in existing().memberIds);
+      
+      allow create: if isSignedIn() && isValidThread(incoming()) && 
+                    incoming().residenceId == getUser(request.auth.uid).residenceId &&
+                    request.auth.uid in incoming().memberIds &&
+                    incoming().createdAt == request.time.toMillis();
+                    
+      allow update: if isSignedIn() && 
+                    existing().residenceId == getUser(request.auth.uid).residenceId &&
+                    (existing().type == 'group' || request.auth.uid in existing().memberIds) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'lastMessageTime', 'updatedAt']) &&
+                    incoming().updatedAt == request.time.toMillis();
+    }
+
+    // --- Messages ---
+    function isValidMessage(data) {
+      return data.keys().hasAll(['senderId', 'text', 'createdAt']) &&
+             data.senderId is string && data.senderId.size() > 0 &&
+             data.text is string && data.text.size() <= 2000 &&
+             data.createdAt is number;
+    }
+
+    match /threads/{threadId}/messages/{messageId} {
+      // Check parent thread access
+      function canAccessThread() {
+        let thread = get(/databases/$(database)/documents/threads/$(threadId)).data;
+        return thread.residenceId == getUser(request.auth.uid).residenceId &&
+               (thread.type == 'group' || request.auth.uid in thread.memberIds);
+      }
+
+      allow read: if isSignedIn() && canAccessThread();
+      
+      allow create: if isSignedIn() && 
+                    incoming().senderId == request.auth.uid &&
+                    isValidMessage(incoming()) && 
+                    incoming().createdAt == request.time.toMillis() &&
+                    canAccessThread();
+    }
+
+    // --- Documents ---
+    function isValidDocument(data) {
+       return data.keys().hasAll(['residenceId', 'title', 'category', 'fileUrl', 'createdAt']) &&
+              data.residenceId is string && data.residenceId.size() > 0 &&
+              data.title is string && data.title.size() > 0 && data.title.size() <= 150 &&
+              data.category is string && data.category.size() > 0 && data.category.size() <= 50 &&
+              data.fileUrl is string && data.fileUrl.size() > 0 && data.fileUrl.size() <= 500 &&
+              data.createdAt is number;
+    }
+
+    match /documents/{documentId} {
+      allow get, list: if isSignedIn() && existing().residenceId == getUser(request.auth.uid).residenceId;
+      // For now, allow any member to upload documents. In a real app we'd check if they are 'syndic' or 'board'.
+      allow create: if isSignedIn() && isValidDocument(incoming()) && 
+                    incoming().residenceId == getUser(request.auth.uid).residenceId &&
+                    incoming().createdAt == request.time.toMillis();
+    }
+
+  }
+}
